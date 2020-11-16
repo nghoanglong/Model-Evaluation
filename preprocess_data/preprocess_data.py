@@ -6,16 +6,36 @@ import os
 class PreprocessData:
     def __init__(self,
                  FOLDER_PATH):
+        """Constructor với tham số nhận vào làm FOLDER_PATH
+
+            FOLDER_PATH định dạng ví dụ: dir_current/data_set/
+        """
         self.folder_path = FOLDER_PATH
+        self.dataset = None
 
     def load_dataset(self,
-                     type_dataset):
-        if type_dataset == 'train':
-            pass
-        elif type_dataset == 'dev':
-            pass
-        else:
-            pass
+                     type_dataset,
+                     file_extension='.txt'):
+        """Load dataset tương ứng theo type_dataset
+
+            type_dataset = [train, dev, test] | type = string
+            file_extension = .txt, .csv,... | type = string
+
+            return ndarray shape(n, 1) với
+                row = sentence được format theo treebank
+        """
+        try:
+            DATASET_REQ_PATH = self.folder_path + '/' + type_dataset + file_extension
+            check_exist = os.path.isfile(DATASET_REQ_PATH)
+            if check_exist:
+                with open(DATASET_REQ_PATH, 'r') as reader:
+                    self.dataset = np.array([line.rstrip("\n") for line in reader])
+                return self.dataset
+            else:
+                raise FileExistsError('File nay ko ton tai')
+        except FileExistsError as err:
+            print(err)
+            return None
 
     def SplitToken_FromTreebank(self,
                                 treebank):
@@ -23,14 +43,15 @@ class PreprocessData:
 
     def Tree_toSentence(self,
                         treebank):
-        with open('./data/trees/train.txt', 'r') as f:
-            li_sentence = []
-            for line in f:
-                li_sentence.append(line.rstrip('\n'))
-        from nltk.tree import Tree
-        t = Tree.fromstring(str(li_sentence[0]))
-        sent = ' '.join(t.leaves())
-        print(sent)
+        # with open('./data/trees/train.txt', 'r') as f:
+        #     li_sentence = []
+        #     for line in f:
+        #         li_sentence.append(line.rstrip('\n'))
+        # from nltk.tree import Tree
+        # t = Tree.fromstring(str(li_sentence[0]))
+        # sent = ' '.join(t.leaves())
+        # print(sent)
+        pass
 
     def assign_sentiment(self,
                          file_phrases,
@@ -148,13 +169,7 @@ class PreprocessData:
 
 
 if __name__ == '__main__':
-    # data = PreprocessData('./data/ScoreNLP')
-    # train_data = data.load_dataset('train')
-
-    # # demo split dataset
-    # data.split_dataset('./collect_data/stanfordSentimentTreebank/datasetSentences.txt',
-    #                    './collect_data/stanfordSentimentTreebank/datasetSplit.txt')
-
-    # # demo assign sentiment
-    # data.assign_sentiment('./stanfordSentimentTreebank/dictionary.txt',
-    #                       './stanfordSentimentTreebank/sentiment_labels.txt')
+    # demo load dataset
+    data = PreprocessData('./data/trees')
+    train_data = data.load_dataset('train', '.txt')
+    print(train_data.shape)
