@@ -66,16 +66,12 @@ class PreprocessData:
 
             return dictionary{token: ids, token: ids,...}
         """
-        big_sent = ' '.join(self.Tree_toSentence(sentence) for sentence in self.dataset)
-        li_tokens = word_tokenize(big_sent)
-        self.lib_tokens = {}
-        ids = 1
-        for token in li_tokens:
-            if token not in self.lib_tokens:
-                self.lib_tokens[token] = ids
-                ids = ids + 1
-        return self.lib_tokens
-        
+        li_tokens = set()
+        for sentence in self.dataset:
+            li_tokens.update(self.SplitToken_FromTreebank(sentence))
+        lib_tokens = dict([(token, idx)
+                           for idx, token in enumerate(li_tokens)])
+        return lib_tokens
 
     def assign_sentiment(self,
                          file_phrases,
@@ -112,55 +108,6 @@ class PreprocessData:
             print(f'Create and save file data at {path}')
             df_assignLabels.to_csv(path + "\\phrases_and_sentiment.csv")
 
-    def split_dataset(self,
-                      SENTENCE_PATH,
-                      LABEL_SENTENCE_PATH):
-        """Chia dataset gồm các sentence thành các file data khác nhau dựa theo label, rồi tạo folder để lưu trữ file
-        
-            label 1 = train data
-            label 2 = test data
-            label 3 = dev data
-        """
-
-        df_dataSentence = pd.read_csv(SENTENCE_PATH, sep='\t')
-        df_labelSplitData = pd.read_csv(LABEL_SENTENCE_PATH, sep=',')
-        df_mergeSplitLabel = pd.merge(df_dataSentence,
-                                      df_labelSplitData,
-                                      on='sentence_index')
-
-        grp_splitlabel = df_mergeSplitLabel.groupby('splitset_label')
-        train_data = grp_splitlabel.get_group(1).loc[:, ['sentence', 'splitset_label']]
-        test_data = grp_splitlabel.get_group(2).loc[:, ['sentence', 'splitset_label']]
-        dev_data = grp_splitlabel.get_group(3).loc[:, ['sentence', 'splitset_label']]
-
-        datasets = np.array(
-            [train_data, test_data, dev_data],
-            dtype=object
-        )
-
-        # thêm cột index [0, 1, 2, 3,...]
-        for file in datasets:
-            file.index = pd.MultiIndex.from_arrays(
-                [np.arange(len(file.index))], names=['index'])
-
-        # create and save data to folder
-        try:
-            path = os.getcwd() + "\data"
-            if os.path.exists(path):
-                raise OSError
-            else:
-                os.mkdir(path)
-        except OSError:
-            print(f"Can't create folder at {path} because it was existed")
-        else:
-            print(f"Successfully created folder at {path}")
-        finally:
-            print(f'Create and Save file data at {path}')
-            train_data.to_csv(path + "\\train_data.csv")
-            dev_data.to_csv(path + "\\dev_data.csv")
-            test_data.to_csv(path + "\\test_data.csv")
-
-    
 
 if __name__ == '__main__':
     # demo load dataset
@@ -169,5 +116,3 @@ if __name__ == '__main__':
 
     lib_tokens = data.getAllTokens()
     print(len(lib_tokens))
-
-    
