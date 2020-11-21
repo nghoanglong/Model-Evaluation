@@ -3,6 +3,9 @@ import pandas as pd
 import os
 from nltk.tree import Tree
 from nltk.tokenize import word_tokenize
+import torch
+import torch.nn as nn
+from torch.nn.utils.rnn import pad_sequence
 
 
 class PreprocessData:
@@ -13,8 +16,6 @@ class PreprocessData:
             FOLDER_PATH định dạng ví dụ: dir_current/data_set/
         """
         self.folder_path = FOLDER_PATH
-        self.dataset = None
-        self.lib_tokens = None
 
     def load_dataset(self,
                      type_dataset,
@@ -24,95 +25,109 @@ class PreprocessData:
             type_dataset = [train, dev, test] | type = string
             file_extension = .txt, .csv,... | type = string
 
-            return ndarray shape(n, 1) với
-                row = sentence được format theo treebank
+            return ndarray shape(n, 2) với
+                row = np.array[list_tokens extract from sentence, label]
         """
         try:
             DATASET_REQ_PATH = self.folder_path + '/' + type_dataset + file_extension
             check_exist = os.path.isfile(DATASET_REQ_PATH)
             if check_exist:
                 with open(DATASET_REQ_PATH, 'r') as reader:
-                    self.dataset = np.array(
-                        [line.rstrip("\n") for line in reader])
-                return self.dataset
+                    dataset = np.array([
+                        np.array([self.PTB_tokenize(line.rstrip("\n")),
+                                  self.PTB_get_label(line)], dtype=object)
+                        for line in reader])
+                return dataset
             else:
                 raise FileExistsError('File nay ko ton tai')
         except FileExistsError as err:
             print(err)
             return None
 
-    def SplitToken_FromTreebank(self,
-                                treebank):
-        """Split list các token từ TreeBank
+    def PTB_get_label(self,
+                      treebank):
+        """get label của root sentece trong PTB
+            treebank - type string
+            return label
+        """
+        tree = Tree.fromstring(treebank)
+        return tree.label()
+
+    def PTB_tokenize(self,
+                     treebank):
+        """Split list các token từ cây PTB
             
             treebank - type string
             return array = [token, token, token,...]
         """
         tree = Tree.fromstring(str(treebank))
-        return tree.leaves()
+        return np.array(tree.leaves())
 
-    def Tree_toSentence(self,
-                        treebank):
-        """Convert tree thành một sentence hoàn chỉnh với
+    def transfrom_sentence(self,
+                           li_tokens):
+        """Transfrom list các tokens thành 1 sentence hoàn chỉnh
 
-            treebank - type string
+            li_tokens = [token, token, token,...]
             return sentence
         """
-        sentence = ' '.join(self.SplitToken_FromTreebank(treebank))
+        sentence = ' '.join(li_tokens)
         return sentence
 
-    def getAllTokens(self):
+    def get_list_vocabularies(self,
+                              dataset,
+                              reverse=False):
         """Tạo một kho các tokens từ list các sentences
-
-            return dictionary{token: ids, token: ids,...}
+            
+            dataset = [[token, token, token,...], label]
+            return dictionary{token: ids, token: ids,...} if reverse = False
+            return dictionary{ids: token, ids: token,...} if reverse = True
         """
         li_tokens = set()
-        for sentence in self.dataset:
-            li_tokens.update(self.SplitToken_FromTreebank(sentence))
-        lib_tokens = dict([(token, idx)
-                           for idx, token in enumerate(li_tokens)])
+        for sample in dataset:
+            li_tokens.update(sample[0])
+        
+        if reverse:
+            lib_tokens = dict([(idx, token)
+                            for idx, token in enumerate(li_tokens)])
+        else:
+            lib_tokens = dict([(token, idx)
+                            for idx, token in enumerate(li_tokens)])
         return lib_tokens
 
-    def assign_sentiment(self,
-                         file_phrases,
-                         file_sentimentLabels):
-        """Gán sentiment labels cho các phrases tương ứng
+    def encode_sentence(self,
+                        sent_tokenized,
+                        li_vocabs):
+        """Encode một sentence về dạng mỗi token tương ứng với một id trong list vocabs
 
-            Kết quả là 1 DataFrame được lưu thành file csv với định dạng
-                row = samples
-                column = ['phrase ids', 'phrases', 'sentiment values']
-
+            sent_tokenized - sentence đã được tokenize thành list các tokens
+            li_vocabs = {token: id, token: id,...}
+            return sentence = [id, id, id, id,...]
         """
-        df_phrases = pd.read_csv(file_phrases, sep='|', header=None)
-        df_sentimentLabels = pd.read_csv(file_sentimentLabels, sep='|')
 
-        df_phrases.columns = ['phrases', 'phrase ids']
+        res_encode = np.array([li_vocabs[token] if token in li_vocabs
+                               else print('does not have token in li vocabs')
+                               for token in sent_tokenized])
+        return res_encode
 
-        df_assignLabels = pd.merge(
-            df_phrases, df_sentimentLabels, on='phrase ids')
-        df_assignLabels = df_assignLabels[[
-            'phrase ids', 'phrases', 'sentiment values']]
+    def decode_sentence(self,
+                        li_vocabs):
+        """Decode một list id về dạng list các token tương ứng
 
-        # create and save data to folder
-        try:
-            path = os.getcwd() + "\data"
-            if os.path.exists(path):
-                raise OSError
-            else:
-                os.mkdir(path)
-        except OSError:
-            print(f"Can't create folder at {path} because it was existed")
-        else:
-            print(f"Successfully created folder at {path}")
-        finally:
-            print(f'Create and save file data at {path}')
-            df_assignLabels.to_csv(path + "\\phrases_and_sentiment.csv")
+            sent_tokenized - sentence đã được tokenize thành list các tokens
+            li_vocabs = {token: id, token: id,...}
+            return sentence = [id, id, id, id,...]
+        """
+        pass
 
 
 if __name__ == '__main__':
-    # demo load dataset
+    # demo
     data = PreprocessData('./data/trees')
     train_data = data.load_dataset('train', '.txt')
 
-    lib_tokens = data.getAllTokens()
-    print(len(lib_tokens))
+    li_vocabs = data.get_list_vocabularies(train_data)  # lấy ra list các vocabs
+    encode_li_sent = np.array([torch.tensor(data.encode_sentence(sample, li_vocabs))
+                               for sample in train_data[:, 0]],
+                              dtype=object)  # encode list các sentence
+
+    padded = pad_sequence(encode_li_sent, batch_first=True)
